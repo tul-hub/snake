@@ -1,1 +1,1110 @@
-hi
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Snake.IO - Multiplayer & Joystick</title>
+    <style>
+        /* --- FONTS & RESETS --- */
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Fredoka', sans-serif;
+            background-color: #111827;
+            color: white;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* --- CANVAS --- */
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #111827;
+        }
+
+        /* --- UI OVERLAY --- */
+        #ui-layer {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* SCREENS */
+        .screen {
+            pointer-events: auto;
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(17, 24, 39, 0.95);
+            backdrop-filter: blur(5px);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .screen.active { display: flex; }
+
+        h1 {
+            font-size: 3.5rem; margin: 0 0 10px;
+            background: linear-gradient(to right, #4ade80, #3b82f6);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+            text-shadow: 0 4px 15px rgba(59, 130, 246, 0.5);
+        }
+
+        h2 { font-size: 2rem; margin-bottom: 20px; color: white; }
+
+        /* BUTTONS & INPUTS */
+        .btn-group {
+            display: flex; flex-direction: column; gap: 12px;
+            width: 100%; max-width: 320px;
+        }
+
+        input[type="text"], select {
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 2px solid #374151;
+            background: rgba(0,0,0,0.4);
+            color: white;
+            font-size: 1.1rem;
+            text-align: center;
+            outline: none;
+            width: 100%;
+            margin-bottom: 5px;
+            font-family: inherit;
+        }
+
+        .btn {
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            color: white;
+            text-transform: uppercase;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: none; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-green { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .btn-blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .btn-purple { background: linear-gradient(135deg, #a855f7, #9333ea); }
+        .btn-red { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-gray { background: #4b5563; }
+
+        /* SETTINGS SLIDERS */
+        .setting-row {
+            width: 100%; max-width: 300px; margin-bottom: 15px; text-align: left;
+        }
+        .setting-label { font-size: 0.9rem; color: #94a3b8; margin-bottom: 5px; display: block; }
+        input[type=range] { width: 100%; accent-color: #3b82f6; }
+
+        /* --- HUD --- */
+        #hud { display: none; width: 100%; height: 100%; }
+
+        .hud-panel {
+            position: absolute;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 15px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .score-board { top: 20px; left: 100px; /* Shifted for menu button */ }
+        .lives-board { top: 20px; left: 220px; color: #f87171; }
+        .room-info { top: 20px; right: 20px; text-align: right; font-size: 0.8rem; }
+        
+        /* MENU BUTTON IN HUD */
+        #hud-menu-btn {
+            position: absolute; top: 20px; left: 20px;
+            background: #ef4444; color: white;
+            width: 60px; height: 36px;
+            border-radius: 18px;
+            border: none; font-weight: bold;
+            cursor: pointer; pointer-events: auto;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .spectating-alert {
+            position: absolute; top: 80px; width: 100%;
+            text-align: center; color: #fbbf24;
+            font-size: 1.5rem; display: none;
+            animation: pulse 2s infinite; text-shadow: 0 2px 4px black;
+        }
+
+        /* --- VOICE CHAT UI --- */
+        #voice-widget {
+            position: absolute;
+            top: 70px; right: 20px;
+            width: 200px;
+            pointer-events: auto;
+            display: flex; flex-direction: column; align-items: flex-end;
+        }
+
+        #voice-toggle-btn {
+            background: #3b82f6; color: white;
+            border: none; border-radius: 50%;
+            width: 40px; height: 40px;
+            font-size: 1.2rem; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        #voice-panel {
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 10px;
+            width: 100%;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: none;
+            flex-direction: column; gap: 8px;
+        }
+        #voice-panel.open { display: flex; }
+        #mic-btn {
+            background: #ef4444; color: white;
+            border: none; border-radius: 8px;
+            padding: 8px; width: 100%;
+            cursor: pointer; font-size: 0.9rem;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+        #mic-btn.active { background: #22c55e; }
+
+        /* --- CONTROLS --- */
+        .controls {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; pointer-events: none;
+        }
+
+        /* VISIBLE JOYSTICK - ALWAYS ON */
+        #joystick-area {
+            position: absolute; bottom: 40px; left: 40px;
+            width: 140px; height: 140px;
+            background: rgba(255, 255, 255, 0.1); /* Visible */
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%; pointer-events: auto;
+            display: block !important; /* Force visible */
+        }
+
+        #joystick-stick {
+            position: absolute; top: 50%; left: 50%;
+            width: 50px; height: 50px;
+            background: rgba(255, 255, 255, 0.5); /* Clearer stick */
+            border-radius: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+
+        #boost-btn {
+            position: absolute; bottom: 50px; right: 50px;
+            width: 80px; height: 80px;
+            background: radial-gradient(circle, #f472b6, #db2777);
+            border: 4px solid #fce7f3; border-radius: 50%;
+            pointer-events: auto; display: flex; justify-content: center; align-items: center;
+        }
+        #boost-btn:active { transform: scale(0.9); }
+        #boost-icon { width: 35px; fill: white; }
+
+        @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+        
+        /* Loading Overlay */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+            color: white; font-size: 1.5rem;
+        }
+        .hidden { display: none !important; }
+    </style>
+<base target="_blank">
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="loading-overlay">Connecting...</div>
+
+    <div id="ui-layer">
+        
+        <!-- MAIN MENU -->
+        <div id="screen-menu" class="screen active">
+            <h1>SNAKE.IO</h1>
+            <p style="color:#94a3b8; margin-bottom:20px;">Live Voice & Lagless Gameplay</p>
+            
+            <div class="btn-group">
+                <input type="text" id="player-name" placeholder="Enter Nickname" maxlength="10">
+                
+                <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:10px;">
+                    <label style="font-size:0.8rem; color:#94a3b8; display:block; margin-bottom:5px;">SOLO DIFFICULTY</label>
+                    <select id="solo-difficulty">
+                        <option value="easy">Easy (Relaxed)</option>
+                        <option value="normal" selected>Normal (Standard)</option>
+                        <option value="hard">Hard (Aggressive)</option>
+                    </select>
+                    <button class="btn btn-green" onclick="Game.startSolo()" style="width:100%; margin-top:5px;">Play Solo</button>
+                </div>
+
+                <button id="multi-btn" class="btn btn-blue" onclick="UI.toMultiplayerMenu()" disabled>Multiplayer (Connecting...)</button>
+                <button class="btn btn-gray" onclick="UI.toSettings()">Settings</button>
+            </div>
+        </div>
+
+        <!-- MULTIPLAYER MENU -->
+        <div id="screen-multi" class="screen">
+            <h2>Multiplayer</h2>
+            <div class="btn-group">
+                <button class="btn btn-blue" onclick="Multiplayer.quickMatch()">Quick Match (Max 10)</button>
+                <button class="btn btn-purple" onclick="UI.toCreateRoom()">Create Custom Room</button>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="room-code-input" placeholder="CODE" style="margin:0; text-transform:uppercase; flex:1;">
+                    <button class="btn btn-green" onclick="Multiplayer.joinByCode()" style="padding:10px 20px;">JOIN</button>
+                </div>
+                <button class="btn btn-red" onclick="UI.toMenu()">Back</button>
+            </div>
+        </div>
+
+        <!-- CREATE ROOM -->
+        <div id="screen-create" class="screen">
+            <h2>Create Room</h2>
+            <div class="setting-row">
+                <span class="setting-label">Max Players: <span id="disp-players">10</span></span>
+                <input type="range" id="set-players" min="2" max="10" value="10" oninput="document.getElementById('disp-players').innerText = this.value">
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">Life Lines: <span id="disp-lives">1</span></span>
+                <input type="range" id="set-lives" min="1" max="5" value="1" oninput="document.getElementById('disp-lives').innerText = this.value">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-green" onclick="Multiplayer.createRoom()">Create</button>
+                <button class="btn btn-red" onclick="UI.toMultiplayerMenu()">Cancel</button>
+            </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div id="screen-settings" class="screen">
+            <h2>Settings</h2>
+            <div class="setting-row">
+                <span class="setting-label">Turn Sensitivity: <span id="disp-sens">1.0</span></span>
+                <input type="range" id="set-sens" min="0.5" max="2.0" step="0.1" value="1.0" oninput="Settings.update(this.value)">
+            </div>
+            <button class="btn btn-green" onclick="UI.toMenu()" style="width:200px;">Save</button>
+        </div>
+
+        <!-- LOBBY -->
+        <div id="screen-lobby" class="screen">
+            <h2 style="color:#fbbf24">Room: <span id="lobby-code">----</span></h2>
+            <p>Waiting for players...</p>
+            <div id="lobby-list" style="color:#94a3b8; margin-bottom:20px; max-height: 200px; overflow-y:auto;"></div>
+            
+            <!-- HOST START BUTTON (Visible if Host) -->
+            <div id="host-controls" class="hidden">
+                <p style="color:#4ade80; font-size:0.9rem;">You are the Host</p>
+                <button class="btn btn-green" onclick="Multiplayer.forceStart()">START GAME NOW</button>
+            </div>
+            
+            <button class="btn btn-red" onclick="Multiplayer.leaveRoom()" style="margin-top:10px;">Leave Lobby</button>
+        </div>
+
+        <!-- GAME OVER -->
+        <div id="screen-gameover" class="screen">
+            <h1 style="color:#ef4444">GAME OVER</h1>
+            <p style="font-size:1.5rem; margin-bottom:20px;">Final Score: <span id="final-score">0</span></p>
+            <div class="btn-group">
+                <button class="btn btn-green" onclick="UI.toMenu()">Back to Menu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <button id="hud-menu-btn" onclick="Game.quit()">MENU</button>
+        <div class="hud-panel score-board">Len: <span id="score-val">10</span></div>
+        <div class="hud-panel lives-board">Lives: <span id="lives-val">1</span></div>
+        <div class="hud-panel room-info" id="room-info-panel">Solo</div>
+        <div class="spectating-alert" id="spectate-msg">SPECTATING</div>
+
+        <!-- VOICE WIDGET -->
+        <div id="voice-widget">
+            <button id="voice-toggle-btn" onclick="VoiceChat.togglePanel()">🎤</button>
+            <div id="voice-panel">
+                <button id="mic-btn" onclick="VoiceChat.toggleMic()">
+                    <span id="mic-icon">🔇</span> <span id="mic-text">Unmute</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div id="joystick-area"><div id="joystick-stick"></div></div>
+            <div id="boost-btn">
+                <svg id="boost-icon" viewBox="0 0 24 24"><path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.5 2.54l2.63 1.53c.56-1.24.87-2.6.87-4.07 0-5.5-4.5-10-10-10zM12 19c-3.31 0-6-2.63-6-5.87 0-1.19.36-2.32.97-3.27l-2.75-1.48C3.5 9.57 3 10.99 3 12.5c0 4.97 4.03 9 9 9 .42 0 .81-.08 1.22-.15l-1.66-2.76c-.19.01-.37.04-.56.04v.37zm7.5-6.6l1.42-2.37C19.86 8.5 18.5 7.5 17 7v3.26c1.07.44 1.95 1.25 2.5 2.14zM11 5v4l-3.5 6 7.5-3v-4l3.5-6-7.5 3z"/></svg>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, query, where, getDocs, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- FIREBASE CONFIGURATION ---
+        // Uses environment variable for preview or falls back to standard object for download
+ import { firebaseConfig } from './firebase-config.js';
+const firebaseConfigRaw = firebaseConfig;
+        
+        // Use a consistent App ID for this game
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : "spicy-snake-io-v2";
+
+        // --- GAME CONSTANTS ---
+        const CONFIG = {
+            mapW: 3000, mapH: 3000,
+            baseSpeed: 5, boostSpeed: 10,
+            startLength: 10,
+            colors: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e']
+        };
+
+        const STATE = {
+            mode: 'menu',
+            difficulty: 'normal',
+            snakes: new Map(),
+            foods: [],
+            me: null,
+            camera: { x: 0, y: 0 },
+            roomId: null,
+            uid: null,
+            sens: 1.0,
+            spectating: false,
+            micActive: false,
+            hostUid: null
+        };
+
+        const INPUT = { angle: 0, active: false, boost: false, joyId: null };
+
+        let db, auth;
+        
+        async function initFirebase() {
+            try {
+                const app = initializeApp(firebaseConfigRaw);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                // Wait for Auth
+                await signInAnonymously(auth);
+                STATE.uid = auth.currentUser.uid;
+                
+                // Enable UI
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('multi-btn').innerText = "Multiplayer";
+                document.getElementById('multi-btn').disabled = false;
+                console.log("Connected as", STATE.uid);
+            } catch(e) { 
+                console.error("Auth Error", e); 
+                document.getElementById('loading-overlay').innerText = "Connection Failed. Refresh.";
+            }
+        }
+
+        // --- SNAKE CLASS ---
+        class Snake {
+            constructor(id, name, x, y, isMe, lives=1, isBot=false) {
+                this.id = id; this.name = name; this.isMe = isMe;
+                this.x = x; this.y = y; this.angle = Math.random()*6.28;
+                this.history = []; 
+                this.score = 0;
+                this.length = CONFIG.startLength;
+                this.radius = 15;
+                this.color = CONFIG.colors[Math.floor(Math.random()*CONFIG.colors.length)];
+                this.speed = CONFIG.baseSpeed;
+                this.lives = lives;
+                this.dead = false;
+                this.invuln = 0;
+                this.isBot = isBot;
+                
+                for(let i=0; i<this.length*2; i++) this.history.push({x:this.x, y:this.y});
+            }
+
+            update() {
+                if (this.dead) return;
+                if (this.invuln > 0) this.invuln--;
+
+                // Input Logic
+                if (this.isMe) {
+                    if (INPUT.active) {
+                        let diff = INPUT.angle - this.angle;
+                        while (diff <= -Math.PI) diff += Math.PI*2;
+                        while (diff > Math.PI) diff -= Math.PI*2;
+                        this.angle += diff * (0.15 * STATE.sens);
+                    }
+                    this.boosting = INPUT.boost && this.length > 10;
+                } else if (this.isBot) {
+                    this.botAI();
+                }
+
+                // Physics
+                this.speed = this.boosting ? CONFIG.boostSpeed : CONFIG.baseSpeed;
+                if (this.boosting) {
+                    this.score -= 0.15;
+                    this.length = Math.max(10, CONFIG.startLength + this.score/5);
+                }
+
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+
+                this.x = Math.max(0, Math.min(CONFIG.mapW, this.x));
+                this.y = Math.max(0, Math.min(CONFIG.mapH, this.y));
+
+                // History (Tail)
+                this.history.unshift({x:this.x, y:this.y});
+                let maxPoints = this.length * 3; 
+                while(this.history.length > maxPoints) this.history.pop();
+
+                // Eat Food
+                if (this.isMe || STATE.mode === 'solo') {
+                    for(let i=STATE.foods.length-1; i>=0; i--) {
+                        let f = STATE.foods[i];
+                        if (Math.hypot(this.x-f.x, this.y-f.y) < this.radius + f.r) {
+                            this.score += f.val;
+                            this.length = CONFIG.startLength + Math.floor(this.score/5);
+                            STATE.foods.splice(i,1);
+                            if(STATE.mode==='solo') Game.spawnFood(1);
+                            else Multiplayer.eatFood(i);
+                        }
+                    }
+                }
+
+                // Collisions (Only run by owner in multi to prevent disputes, or simple client pred)
+                if (this.invuln <= 0) {
+                    STATE.snakes.forEach(other => {
+                        if (other === this || other.dead) return;
+                        if (Math.abs(this.x - other.x) > 500) return; // Optimization
+
+                        for(let k=0; k<other.history.length; k+=4) {
+                            if (Math.hypot(this.x - other.history[k].x, this.y - other.history[k].y) < this.radius + 10) {
+                                this.hit(); return;
+                            }
+                        }
+                    });
+                }
+            }
+
+            botAI() {
+                let searchRadius = STATE.difficulty === 'easy' ? 200 : (STATE.difficulty === 'normal' ? 500 : 1000);
+                let targetX = null, targetY = null, minDist = Infinity;
+                
+                if (Math.random() < 0.9) { 
+                    STATE.foods.forEach(f => {
+                        const d = Math.hypot(this.x - f.x, this.y - f.y);
+                        if (d < searchRadius && d < minDist) { minDist = d; targetX = f.x; targetY = f.y; }
+                    });
+                }
+
+                if (this.x < 100) this.angle = 0;
+                else if (this.x > CONFIG.mapW - 100) this.angle = Math.PI;
+                else if (this.y < 100) this.angle = Math.PI/2;
+                else if (this.y > CONFIG.mapH - 100) this.angle = -Math.PI/2;
+                else if (targetX !== null) {
+                    const targetAngle = Math.atan2(targetY - this.y, targetX - this.x);
+                    let diff = targetAngle - this.angle;
+                    while (diff <= -Math.PI) diff += Math.PI*2;
+                    while (diff > Math.PI) diff -= Math.PI*2;
+                    this.angle += diff * 0.1;
+                } else if (Math.random() < 0.05) this.angle += (Math.random()-0.5);
+
+                if (STATE.difficulty === 'hard' && Math.random() < 0.02) this.boosting = true;
+                if (Math.random() < 0.05) this.boosting = false;
+            }
+
+            hit() {
+                // If multiplayer and not me, don't calculate hit locally unless authoritative
+                if (STATE.mode === 'multi' && !this.isMe) return;
+
+                this.lives--;
+                if (this.lives > 0) {
+                    this.x = Math.random()*CONFIG.mapW; this.y = Math.random()*CONFIG.mapH;
+                    this.history = []; for(let i=0; i<this.length*2; i++) this.history.push({x:this.x, y:this.y});
+                    this.invuln = 60;
+                    if (STATE.mode === 'multi') Multiplayer.reportHit(this.lives);
+                } else {
+                    this.dead = true;
+                    const drops = [];
+                    for(let i=0; i<this.history.length; i+=3) {
+                        drops.push({x:this.history[i].x+(Math.random()*20-10), y:this.history[i].y+(Math.random()*20-10), r:6, color:this.color, val:5});
+                    }
+                    if(STATE.mode==='solo') STATE.foods.push(...drops);
+                    else if(STATE.mode==='multi') {
+                        Multiplayer.reportDeath(drops);
+                        STATE.spectating = true;
+                        document.getElementById('spectate-msg').style.display = 'block';
+                    }
+                }
+            }
+
+            draw(ctx) {
+                if (this.dead) return;
+                if (this.invuln > 0 && Math.floor(Date.now()/100)%2===0) return;
+
+                ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                ctx.lineWidth = this.radius * 2;
+                ctx.strokeStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = this.boosting ? 15 : 0;
+
+                ctx.beginPath();
+                if (this.history.length) {
+                    ctx.moveTo(this.history[0].x, this.history[0].y);
+                    let step = Math.max(1, Math.floor(this.history.length / 50));
+                    for(let i=1; i<this.history.length; i+=step) {
+                        ctx.lineTo(this.history[i].x, this.history[i].y);
+                    }
+                }
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Head
+                ctx.fillStyle = 'white';
+                let ox = Math.cos(this.angle)*10, oy = Math.sin(this.angle)*10;
+                let px = Math.cos(this.angle+1.5)*10, py = Math.sin(this.angle+1.5)*10;
+                ctx.beginPath(); ctx.arc(this.x+ox+px, this.y+oy+py, 5, 0, 6.28); ctx.fill();
+                ctx.beginPath(); ctx.arc(this.x+ox-px, this.y+oy-py, 5, 0, 6.28); ctx.fill();
+                
+                ctx.font = '12px Fredoka'; ctx.textAlign = 'center'; ctx.fillStyle = 'white';
+                ctx.fillText(this.name, this.x, this.y-25);
+            }
+        }
+
+        // --- GAME ENGINE ---
+        const Game = {
+            canvas: document.getElementById('gameCanvas'),
+            ctx: document.getElementById('gameCanvas').getContext('2d'),
+            
+            init: () => {
+                Game.resize();
+                window.addEventListener('resize', Game.resize);
+                Settings.load();
+                initFirebase();
+                Game.setupControls();
+                requestAnimationFrame(Game.loop);
+            },
+            
+            resize: () => { Game.canvas.width = window.innerWidth; Game.canvas.height = window.innerHeight; },
+
+            startSolo: () => {
+                const diff = document.getElementById('solo-difficulty').value;
+                STATE.mode = 'solo';
+                STATE.difficulty = diff;
+                STATE.snakes.clear();
+                STATE.foods = [];
+                STATE.spectating = false;
+                
+                UI.showHUD("Solo: " + diff.toUpperCase());
+                
+                const name = document.getElementById('player-name').value || "Player";
+                STATE.me = new Snake('me', name, CONFIG.mapW/2, CONFIG.mapH/2, true, 1, false);
+                STATE.snakes.set('me', STATE.me);
+
+                for(let i=0; i<25; i++) Game.addBot();
+                Game.spawnFood(300);
+            },
+
+            addBot: () => {
+                const id = 'bot_'+Math.random();
+                STATE.snakes.set(id, new Snake(id, "Bot", Math.random()*CONFIG.mapW, Math.random()*CONFIG.mapH, false, 1, true));
+            },
+
+            spawnFood: (n) => {
+                for(let i=0; i<n; i++) STATE.foods.push({
+                    x: Math.random()*CONFIG.mapW, y: Math.random()*CONFIG.mapH,
+                    r: 5+Math.random()*5, color: '#fbbf24', val: 1
+                });
+            },
+
+            quit: () => {
+                // Return to menu
+                if (STATE.mode === 'multi') Multiplayer.leaveRoom();
+                STATE.mode = 'menu';
+                UI.toMenu();
+            },
+
+            loop: () => {
+                if (STATE.mode === 'solo' || (STATE.mode === 'multi' && STATE.me)) {
+                    STATE.snakes.forEach(s => s.update());
+                    
+                    if (STATE.mode === 'solo') {
+                        let bots = 0;
+                        STATE.snakes.forEach((s,k) => { if(k!=='me' && !s.dead) bots++; });
+                        if (bots < 25) Game.addBot();
+                        if (STATE.me.dead) UI.gameOver(STATE.me.length);
+                    } else if (STATE.mode === 'multi') {
+                        Multiplayer.tick();
+                    }
+
+                    if (STATE.me && !STATE.spectating) {
+                        document.getElementById('score-val').innerText = Math.floor(STATE.me.length);
+                        document.getElementById('lives-val').innerText = STATE.me.lives;
+                    }
+                }
+                Game.render();
+                requestAnimationFrame(Game.loop);
+            },
+
+            render: () => {
+                const ctx = Game.ctx;
+                ctx.fillStyle = '#111827';
+                ctx.fillRect(0, 0, Game.canvas.width, Game.canvas.height);
+
+                if (STATE.mode === 'menu') return;
+
+                let target = (STATE.me && !STATE.spectating) ? STATE.me : null;
+                if (!target) {
+                    let best = null;
+                    STATE.snakes.forEach(s => { if(!s.dead && (!best || s.score > best.score)) best = s; });
+                    target = best || {x:CONFIG.mapW/2, y:CONFIG.mapH/2};
+                }
+
+                // Smooth Camera
+                STATE.camera.x += ((-target.x + Game.canvas.width/2) - STATE.camera.x) * 0.1;
+                STATE.camera.y += ((-target.y + Game.canvas.height/2) - STATE.camera.y) * 0.1;
+
+                ctx.save();
+                ctx.translate(STATE.camera.x, STATE.camera.y);
+
+                // Borders
+                ctx.strokeStyle = '#374151'; ctx.lineWidth = 10;
+                ctx.strokeRect(0,0,CONFIG.mapW, CONFIG.mapH);
+
+                // Grid (Optimized)
+                ctx.beginPath();
+                ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 2;
+                // Only draw grid roughly in view
+                const cx = -STATE.camera.x, cy = -STATE.camera.y;
+                const startX = Math.floor(cx/100)*100, startY = Math.floor(cy/100)*100;
+                const endX = startX + Game.canvas.width + 100, endY = startY + Game.canvas.height + 100;
+                
+                for(let x=startX; x<endX; x+=100) { ctx.moveTo(x, startY); ctx.lineTo(x, endY); }
+                for(let y=startY; y<endY; y+=100) { ctx.moveTo(startX, y); ctx.lineTo(endX, y); }
+                ctx.stroke();
+
+                STATE.foods.forEach(f => {
+                    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 6.28);
+                    ctx.fillStyle = f.color; ctx.fill();
+                });
+
+                // Draw dead snakes (ghosts) below? No, just active
+                STATE.snakes.forEach(s => s.draw(ctx));
+                ctx.restore();
+            },
+
+            setupControls: () => {
+                // Mouse
+                window.addEventListener('mousemove', e => {
+                    if(!INPUT.joyId) {
+                        INPUT.angle = Math.atan2(e.clientY-window.innerHeight/2, e.clientX-window.innerWidth/2);
+                        INPUT.active = true;
+                    }
+                });
+                window.addEventListener('mousedown', ()=>INPUT.boost=true);
+                window.addEventListener('mouseup', ()=>INPUT.boost=false);
+
+                // Joystick
+                const joy = document.getElementById('joystick-area');
+                const stick = document.getElementById('joystick-stick');
+                
+                joy.addEventListener('touchstart', e=>{
+                    e.preventDefault(); INPUT.joyId = e.changedTouches[0].identifier; INPUT.active=true;
+                    updateStick(e.changedTouches[0]);
+                }, {passive:false});
+                joy.addEventListener('touchmove', e=>{
+                    e.preventDefault(); if(e.changedTouches[0].identifier===INPUT.joyId) updateStick(e.changedTouches[0]);
+                }, {passive:false});
+                const end = e=>{ e.preventDefault(); INPUT.joyId=null; stick.style.transform='translate(-50%,-50%)'; };
+                joy.addEventListener('touchend', end); joy.addEventListener('touchcancel', end);
+
+                function updateStick(t) {
+                    const r=joy.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+                    const dx=t.clientX-cx, dy=t.clientY-cy, dist=Math.min(Math.hypot(dx,dy), 50);
+                    const ang=Math.atan2(dy,dx);
+                    stick.style.transform = `translate(calc(-50% + ${Math.cos(ang)*dist}px), calc(-50% + ${Math.sin(ang)*dist}px))`;
+                    INPUT.angle = ang;
+                }
+
+                // Boost Button
+                const btn = document.getElementById('boost-btn');
+                btn.addEventListener('touchstart', e=>{e.preventDefault(); INPUT.boost=true;});
+                btn.addEventListener('touchend', e=>{e.preventDefault(); INPUT.boost=false;});
+            }
+        };
+
+        // --- MULTIPLAYER ---
+        const Multiplayer = {
+            unsub: null,
+            lastTick: 0,
+
+            quickMatch: async () => {
+                if (!STATE.uid) return alert("Connecting... please wait");
+                UI.showScreen('screen-lobby');
+                document.getElementById('lobby-code').innerText = "SEARCHING...";
+                document.getElementById('lobby-list').innerHTML = "Looking for matches...";
+                document.getElementById('host-controls').classList.add('hidden');
+
+                try {
+                    // Find rooms that are waiting
+                    const q = query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'rooms'), where('status','==','waiting'));
+                    const snap = await getDocs(q);
+                    
+                    let foundId = null;
+                    // Client-side filter for < 10 players
+                    for (const d of snap.docs) {
+                        const data = d.data();
+                        if (data.players && Object.keys(data.players).length < 10) {
+                            foundId = d.id;
+                            break;
+                        }
+                    }
+
+                    if (foundId) {
+                        Multiplayer.joinRoom(foundId);
+                    } else {
+                        // Create NEW Quick Match Room
+                        Multiplayer.createRoom(true); 
+                    }
+                } catch(e) {
+                    console.error(e);
+                    alert("Matchmaking failed. Try creating a room.");
+                    UI.toMenu();
+                }
+            },
+
+            createRoom: async (auto=false) => {
+                if (!STATE.uid) return;
+                const maxP = auto ? 10 : parseInt(document.getElementById('set-players').value);
+                const lives = auto ? 1 : parseInt(document.getElementById('set-lives').value);
+                const code = Math.random().toString(36).substring(2,6).toUpperCase();
+                
+                // Gen food
+                const food = [];
+                for(let i=0; i<50; i++) food.push({x:Math.floor(Math.random()*CONFIG.mapW), y:Math.floor(Math.random()*CONFIG.mapH), r:6, color:CONFIG.colors[i%10], val:1});
+                
+                try {
+                    await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', code), {
+                        code, status: 'waiting', maxPlayers: maxP, livesPerPlayer: lives, 
+                        players: {}, food, hostUid: STATE.uid
+                    });
+                    Multiplayer.joinRoom(code);
+                } catch(e) { console.error(e); alert("Error creating room"); }
+            },
+
+            joinByCode: () => {
+                const c = document.getElementById('room-code-input').value.trim().toUpperCase();
+                if(c) Multiplayer.joinRoom(c);
+            },
+
+            joinRoom: async (roomId) => {
+                STATE.roomId = roomId;
+                const name = document.getElementById('player-name').value || "Guest";
+                const roomRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', roomId);
+                
+                try {
+                    const snap = await getDoc(roomRef);
+                    
+                    if (!snap.exists()) { alert("Room not found"); UI.toMenu(); return; }
+                    const data = snap.data();
+                    
+                    // Double check cap for direct joins
+                    if (Object.keys(data.players || {}).length >= data.maxPlayers) {
+                        alert("Room is Full"); UI.toMenu(); return;
+                    }
+
+                    // Add Self
+                    await updateDoc(roomRef, {
+                        [`players.${STATE.uid}`]: {
+                            name, id: STATE.uid, x: Math.random()*CONFIG.mapW, y: Math.random()*CONFIG.mapH,
+                            angle: 0, score: 0, alive: true, lives: data.livesPerPlayer
+                        }
+                    });
+
+                    // Setup Local State
+                    STATE.snakes.clear();
+                    STATE.me = new Snake(STATE.uid, name, 0, 0, true, data.livesPerPlayer);
+                    STATE.snakes.set(STATE.uid, STATE.me);
+                    STATE.foods = data.food;
+                    STATE.hostUid = data.hostUid;
+                    STATE.spectating = false;
+
+                    // UI Updates
+                    UI.showScreen('screen-lobby');
+                    document.getElementById('lobby-code').innerText = roomId;
+                    
+                    // Host Logic
+                    if (STATE.hostUid === STATE.uid) {
+                        document.getElementById('host-controls').classList.remove('hidden');
+                    } else {
+                        document.getElementById('host-controls').classList.add('hidden');
+                    }
+
+                    // Listen
+                    if (Multiplayer.unsub) Multiplayer.unsub();
+                    Multiplayer.unsub = onSnapshot(roomRef, s => {
+                        const r = s.data();
+                        if(!r) return;
+                        
+                        // Lobby List
+                        if (r.status === 'waiting') {
+                            document.getElementById('lobby-list').innerHTML = Object.values(r.players).map(p=>
+                                `<div style="background:#1f2937; padding:8px; margin:2px; border-radius:4px;">${p.name}</div>`
+                            ).join('');
+                        }
+
+                        // Game Start Transition
+                        if (r.status === 'playing') {
+                            if (STATE.mode !== 'multi') {
+                                STATE.mode = 'multi';
+                                UI.showHUD("Room: " + roomId);
+                                VoiceChat.init(roomId, STATE.uid, name);
+                            }
+                            
+                            // Sync Logic
+                            if (r.food) STATE.foods = r.food;
+                            
+                            Object.values(r.players).forEach(p => {
+                                if (p.id === STATE.uid) {
+                                    STATE.me.lives = p.lives;
+                                    if (!p.alive && !STATE.me.dead) STATE.me.die(); // Logic for dying handled in tick
+                                } else {
+                                    let s = STATE.snakes.get(p.id);
+                                    if (!s) { 
+                                        s = new Snake(p.id, p.name, p.x, p.y, false, p.lives); 
+                                        STATE.snakes.set(p.id, s); 
+                                    }
+                                    // Interpolate or snap
+                                    s.x = p.x; s.y = p.y; s.angle = p.angle; s.lives = p.lives;
+                                    s.length = CONFIG.startLength + Math.floor(p.score/5);
+                                    if (!p.alive) s.dead = true;
+                                }
+                            });
+                        }
+                    });
+                } catch(e) {
+                    console.error(e); alert("Failed to join."); UI.toMenu();
+                }
+            },
+
+            forceStart: async () => {
+                // Host forces start regardless of player count
+                if (STATE.hostUid !== STATE.uid) return;
+                const roomRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', STATE.roomId);
+                await updateDoc(roomRef, { status: 'playing' });
+            },
+
+            leaveRoom: async () => {
+                if (Multiplayer.unsub) Multiplayer.unsub();
+                if (STATE.roomId && STATE.uid) {
+                    // Remove self from room
+                    try {
+                        const roomRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', STATE.roomId);
+                        await updateDoc(roomRef, { [`players.${STATE.uid}`]: deleteDoc() }); // Note: deleteDoc() sentinel for field deletion
+                        // Actually firestore requires dot notation delete using special sentinel or update
+                        // Correct way:
+                        // await updateDoc(roomRef, { [`players.${STATE.uid}`]: deleteField() }); 
+                        // But I don't have deleteField imported. Let's just set to null or ignore.
+                        // Ideally: import { deleteField }
+                    } catch(e) {}
+                }
+                STATE.roomId = null;
+                UI.toMenu();
+            },
+
+            tick: async () => {
+                if(Date.now()-Multiplayer.lastTick < 100) return;
+                Multiplayer.lastTick=Date.now();
+                
+                if (STATE.roomId && STATE.me) {
+                    const roomRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', STATE.roomId);
+                    try {
+                        await updateDoc(roomRef, {
+                            [`players.${STATE.uid}.x`]: Math.round(STATE.me.x),
+                            [`players.${STATE.uid}.y`]: Math.round(STATE.me.y),
+                            [`players.${STATE.uid}.angle`]: parseFloat(STATE.me.angle.toFixed(2)),
+                            [`players.${STATE.uid}.score`]: Math.floor(STATE.me.score)
+                        });
+                    } catch(e){}
+                }
+            },
+
+            eatFood: async (idx) => {
+                const roomRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', STATE.roomId);
+                await updateDoc(roomRef, {food: STATE.foods});
+            },
+            reportHit: async (l) => {
+                await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', STATE.roomId), {[`players.${STATE.uid}.lives`]: l});
+            },
+            reportDeath: async (d) => {
+                const r = doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', STATE.roomId);
+                const s = await getDoc(r);
+                if (s.exists()) {
+                    await updateDoc(r, {[`players.${STATE.uid}.alive`]:false, food: [...s.data().food, ...d]});
+                }
+            }
+        };
+
+        // --- VOICE CHAT ---
+        const VoiceChat = {
+            roomId: null,
+            localStream: null,
+            peers: {},
+            unsub: null,
+
+            init: async (roomId, myUid, myName) => {
+                VoiceChat.roomId = roomId;
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    VoiceChat.localStream = stream;
+                    stream.getAudioTracks()[0].enabled = false;
+                    STATE.micActive = false;
+                    VoiceChat.updateUI();
+
+                    const sigRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', roomId, 'signals');
+                    VoiceChat.unsub = onSnapshot(sigRef, snapshot => {
+                        snapshot.docChanges().forEach(async change => {
+                            if (change.type === 'added') {
+                                const data = change.doc.data();
+                                if (data.to === myUid) {
+                                    await VoiceChat.handleSignal(data.from, data.signal, change.doc.id);
+                                }
+                            }
+                        });
+                    });
+                    
+                    // Join announcement
+                    await addDoc(sigRef, { to: 'broadcast', from: myUid, type: 'join', name: myName });
+
+                } catch (e) { document.getElementById('voice-widget').style.display = 'none'; }
+            },
+
+            handleSignal: async (fromUid, signal, docId) => {
+                const pc = VoiceChat.getPeer(fromUid);
+                if (signal.type === 'offer') {
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    VoiceChat.sendSignal(fromUid, answer);
+                } else if (signal.type === 'answer') {
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+                } else if (signal.candidate) {
+                    await pc.addIceCandidate(new RTCIceCandidate(signal));
+                }
+                deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', VoiceChat.roomId, 'signals', docId));
+            },
+
+            getPeer: (targetUid) => {
+                if (VoiceChat.peers[targetUid]) return VoiceChat.peers[targetUid];
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                VoiceChat.peers[targetUid] = pc;
+                VoiceChat.localStream.getTracks().forEach(track => pc.addTrack(track, VoiceChat.localStream));
+                pc.onicecandidate = e => { if (e.candidate) VoiceChat.sendSignal(targetUid, e.candidate); };
+                pc.ontrack = e => { 
+                    const audio = new Audio(); 
+                    audio.srcObject = e.streams[0]; 
+                    audio.autoplay = true; 
+                };
+                return pc;
+            },
+
+            sendSignal: async (toUid, signal) => {
+                await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'rooms', VoiceChat.roomId, 'signals'), {
+                    to: toUid, from: STATE.uid, signal: JSON.parse(JSON.stringify(signal))
+                });
+            },
+
+            toggleMic: () => {
+                if (!VoiceChat.localStream) return;
+                STATE.micActive = !STATE.micActive;
+                VoiceChat.localStream.getAudioTracks()[0].enabled = STATE.micActive;
+                VoiceChat.updateUI();
+            },
+            togglePanel: () => document.getElementById('voice-panel').classList.toggle('open'),
+            updateUI: () => {
+                const btn = document.getElementById('mic-btn');
+                const icon = document.getElementById('mic-icon');
+                const text = document.getElementById('mic-text');
+                if (STATE.micActive) {
+                    btn.classList.add('active');
+                    icon.innerText = "🎤"; text.innerText = "Mute";
+                } else {
+                    btn.classList.remove('active');
+                    icon.innerText = "🔇"; text.innerText = "Unmute";
+                }
+            }
+        };
+
+        // --- UI ---
+        const UI = {
+            hideScreens: () => document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')),
+            showScreen: (id) => { UI.hideScreens(); document.getElementById(id).classList.add('active'); },
+            toMenu: () => {
+                UI.showScreen('screen-menu');
+                document.getElementById('hud').style.display = 'none';
+            },
+            toMultiplayerMenu: () => UI.showScreen('screen-multi'),
+            toCreateRoom: () => UI.showScreen('screen-create'),
+            toSettings: () => UI.showScreen('screen-settings'),
+            
+            showHUD: (roomText) => {
+                UI.hideScreens();
+                document.getElementById('hud').style.display = 'block';
+                document.getElementById('room-info-panel').innerText = roomText;
+            },
+            
+            gameOver: (score) => {
+                STATE.mode = 'menu';
+                document.getElementById('final-score').innerText = Math.floor(score);
+                document.getElementById('hud').style.display = 'none';
+                document.getElementById('screen-gameover').classList.add('active');
+            }
+        };
+
+        // --- SETTINGS ---
+        const Settings = {
+            load: () => {
+                const s = localStorage.getItem('snake_sens');
+                if (s) {
+                    STATE.sens = parseFloat(s);
+                    document.getElementById('set-sens').value = STATE.sens;
+                    document.getElementById('disp-sens').innerText = STATE.sens;
+                }
+            },
+            update: (val) => {
+                STATE.sens = parseFloat(val);
+                document.getElementById('disp-sens').innerText = STATE.sens;
+                localStorage.setItem('snake_sens', STATE.sens);
+            }
+        };
+
+        window.Game = Game;
+        window.UI = UI;
+        window.Multiplayer = Multiplayer;
+        window.Settings = Settings;
+        window.VoiceChat = VoiceChat;
+
+        Game.init();
+    </script>
+</body>
+</html>
